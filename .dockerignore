@@ -1,0 +1,10 @@
+*.md
+.git
+.gitignore
+.DS_Store
+__MACOSX
+target
+.dockerignore
+Dockerfile
+.idea
+.vscode

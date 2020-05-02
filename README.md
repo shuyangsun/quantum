@@ -1,2 +1,1 @@
-# quantum
-Quantum Computing Symulator
+# Quantum Computing Simulator
