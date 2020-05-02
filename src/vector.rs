@@ -1,5 +1,6 @@
 pub mod linalg {
-    use alga::general::{ComplexField, Field};
+    use alga::general::{ComplexField, Field, RealField};
+    use alga::linear::{InnerSpace, NormedSpace};
     use ndarray::{arr1, Array1};
     use num_traits;
     use num_traits::identities::Zero;
@@ -14,7 +15,7 @@ pub mod linalg {
     }
 
     macro_rules! finite_space {
-        ($cls_name:ident, $ndim:expr) => {
+        ($cls_name:ident, $iter_cls_name:ident, $ndim:expr) => {
         pub struct $cls_name<T: Field> {
             elements: Array1<T>,
         }
@@ -58,6 +59,36 @@ pub mod linalg {
 
             fn neg(self) -> Self::Output {
                 return $cls_name::from_ndarray(-self.elements.clone());
+            }
+        }
+
+        pub struct $iter_cls_name<T: Field> {
+            vec: $cls_name<T>,
+            index: usize,
+        }
+
+        impl<T: Field + Copy> Iterator for $iter_cls_name<T> {
+            type Item = T;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                self.index += 1;
+                if self.index < self.vec.len() {
+                    Some(self.vec[self.index - 1])
+                } else {
+                    None
+                }
+            }
+        }
+
+        impl<T: Field + Copy> IntoIterator for $cls_name<T> {
+            type Item = T;
+            type IntoIter = $iter_cls_name<T>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                $iter_cls_name {
+                    vec: self,
+                    index: 0,
+                }
             }
         }
 
@@ -188,8 +219,8 @@ pub mod linalg {
         }
 
         impl<T: Field> alga::general::AbstractMagma<alga::general::Additive> for $cls_name<T> {
-            fn operate(&self, _right: &Self) -> Self {
-                unimplemented!()
+            fn operate(&self, right: &Self) -> Self {
+                self + right
             }
         }
         impl<T: Field> alga::general::TwoSidedInverse<alga::general::Additive> for $cls_name<T> {
@@ -222,20 +253,16 @@ pub mod linalg {
             type Ring = T;
         }
 
-        impl<T: ComplexField> alga::linear::VectorSpace for $cls_name<T> {
+        impl<T: Field> alga::linear::VectorSpace for $cls_name<T> {
             type Field = T;
         }
 
-        impl<T: ComplexField> alga::linear::NormedSpace for $cls_name<T> {
+        impl<T: ComplexField> NormedSpace for $cls_name<T> {
             type RealField = T::RealField;
             type ComplexField = T;
 
             fn norm_squared(&self) -> Self::RealField {
-                let abs_vals_squared = self.elements.map(|ele: &T| -> Self::RealField {
-                    let abs_val = ele.abs();
-                    abs_val.clone() * abs_val
-                });
-                abs_vals_squared.sum()
+                self.inner_product(self).real()
             }
 
             fn norm(&self) -> Self::RealField {
@@ -243,23 +270,42 @@ pub mod linalg {
             }
 
             fn normalize(&self) -> Self {
-                unimplemented!()
+                match self.try_normalize(Self::RealField::zero()) {
+                    Some(res) => res,
+                    None => panic!("Cannot normalize a vector with norm 0."),
+                }
             }
 
             fn normalize_mut(&mut self) -> Self::RealField {
-                unimplemented!()
+                match self.try_normalize_mut(Self::RealField::zero()) {
+                    Some(norm) => norm,
+                    None => panic!("Cannot normalize a vector with norm 0."),
+                }
             }
 
-            fn try_normalize(&self, _eps: Self::RealField) -> Option<Self> {
-                unimplemented!()
+            fn try_normalize(&self, eps: Self::RealField) -> Option<Self> {
+                let norm = self.norm();
+                if norm.abs() <= eps {
+                    None
+                } else {
+                    Some(Self::from_ndarray(self.elements.map(|ele: &T| -> T {
+                        ele.unscale(norm)
+                    })))
+                }
             }
 
-            fn try_normalize_mut(&mut self, _eps: Self::RealField) -> Option<Self::RealField> {
-                unimplemented!()
+            fn try_normalize_mut(&mut self, eps: Self::RealField) -> Option<Self::RealField> {
+                match Self::try_normalize(&self, eps) {
+                    Some(res) => {
+                        self.elements = res.elements;
+                        Some(self.norm())
+                    },
+                    None => None
+                }
             }
         }
 
-        impl<T: ComplexField> alga::linear::InnerSpace for $cls_name<T> {
+        impl<T: ComplexField> InnerSpace for $cls_name<T> {
             fn inner_product(&self, other: &Self) -> Self::ComplexField {
                 let conjugate_vals = $cls_name::from_ndarray(
                     other
@@ -267,6 +313,26 @@ pub mod linalg {
                         .map(|ele: &Self::ComplexField| -> Self::ComplexField { ele.conjugate() }),
                 );
                 (self * &conjugate_vals).elements.sum()
+            }
+
+            fn angle(&self, other: &Self) -> Self::RealField {
+                let prod = self.inner_product(other);
+                let n1 = self.norm();
+                let n2 = other.norm();
+
+                if n1 == num::zero() || n2 == num::zero() {
+                    num::zero()
+                } else {
+                    let cang = prod.real().unscale(n1 * n2);
+
+                    if cang > num::one() {
+                        num::zero()
+                    } else if cang < -num::one::<Self::RealField>() {
+                        Self::RealField::pi()
+                    } else {
+                        cang.acos()
+                    }
+                }
             }
         }
 
@@ -284,7 +350,7 @@ pub mod linalg {
             }
         }
 
-        impl<T: ComplexField> alga::linear::FiniteDimVectorSpace for $cls_name<T> {
+        impl<T: Field> alga::linear::FiniteDimVectorSpace for $cls_name<T> {
             fn dimension() -> usize {
                 $ndim
             }
@@ -293,18 +359,13 @@ pub mod linalg {
                 if i >= Self::dimension() {
                     panic!("Cannot find canonical basis at index {}", i);
                 }
-                let mut data: [T; $ndim] = [T::zero(); $ndim];
-                data[i] = T::one();
-                Self::new(data)
+                let mut res = Self::zero();
+                res[i] = T::one();
+                res
             }
 
-            fn dot(&self, other: &Self) -> Self::Field {
-                let conjugate_vals = $cls_name::from_ndarray(
-                    other
-                        .elements
-                        .map(|ele: &Self::Field| -> Self::Field { ele.conjugate() }),
-                );
-                (self * &conjugate_vals).elements.sum()
+            fn dot(&self, _other: &Self) -> Self::Field {
+                panic!("Dot product should not be defined on a vector space, use \"inner_product\" on InnerSpace instead.")
             }
 
             unsafe fn component_unchecked(&self, i: usize) -> &Self::Field {
@@ -317,10 +378,19 @@ pub mod linalg {
         }
 
         impl<T: ComplexField> alga::linear::FiniteDimInnerSpace for $cls_name<T> {
-            fn orthonormalize(_vs: &mut [Self]) -> usize {
-                unimplemented!()
+            // Orthonormalizes the given family of vectors. The largest free family of vectors is
+            // moved at the beginning of the array and its size is returned. Vectors at an indices
+            // larger or equal to this length can be modified to an arbitrary value.
+            fn orthonormalize(vs: &mut [Self]) -> usize {
+                for vec in vs {
+                    *vec = Self::normalize(vec);
+                }
+                $ndim  // TODO: what should I return?
             }
 
+            // Applies the given closure to each element of the orthonormal basis of the subspace
+            // orthogonal to free family of vectors vs. If vs is not a free family, the result is
+            // unspecified.
             fn orthonormal_subspace_basis<F: FnMut(&Self) -> bool>(_vs: &[Self], _f: F) {
                 unimplemented!()
             }
@@ -328,8 +398,8 @@ pub mod linalg {
         };
     }
 
-    finite_space!(Vec0, 0);
-    finite_space!(Vec1, 1);
-    finite_space!(Vec2, 2);
-    finite_space!(Vec3, 3);
+    finite_space!(Vec0, Vec0Iter, 0);
+    finite_space!(Vec1, Vec1Iter, 1);
+    finite_space!(Vec2, Vec2Iter, 2);
+    finite_space!(Vec3, Vec3Iter, 3);
 }

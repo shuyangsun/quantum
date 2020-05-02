@@ -1,28 +1,30 @@
+use alga::general::ComplexField;
 use alga::linear::{FiniteDimVectorSpace, InnerSpace, NormedSpace};
 use num_traits::*;
 use quantum::vector::linalg::{Vec2, Vec3};
 use quantum::{Complex, Real};
 
 fn main() {
-    // struct A<T: ComplexField> {
-    //     x: T,
-    // }
-    //
-    // impl<T: ComplexField> A<T> {
-    //     fn hey() {
-    //         T::zero()
-    //     }
-    // }
-    // let mut asdf: [i32; 5];
-    // for ele in asdf.iter_mut() {
-    //     *ele = 0;
-    // }
     let vec_real: Vec2<Real> = Vec2::new([1.0, 2.0]);
     println!("vec_real = {} ", vec_real);
 
     let vec_complex: Vec2<Complex> =
         Vec2::new([Complex { re: 1.0, im: 2.0 }, Complex { re: 3.0, im: 4.0 }]);
     println!("vec_complex = {}", vec_complex);
+
+    let std_real_0 = Vec2::new([1.0, 0.0]);
+    let real_45 = Vec2::new([1.0, 1.0]);
+    let real_angle = std_real_0.angle(&real_45);
+    println!(
+        "**** {}",
+        std_real_0.inner_product(&real_45).real() * std_real_0.norm() * real_45.norm()
+    );
+    println!("Real angle: {}", real_angle);
+    let complex_angle =
+        Vec2::new([Complex { re: 1.0, im: 0.0 }, Complex { re: 1.0, im: 0.0 }]).angle(&Vec2::new(
+            [Complex { re: 0.0, im: 0.0 }, Complex { re: 1.0, im: 0.0 }],
+        ));
+    println!("Complex angle: {}", complex_angle);
 
     let mul_res: Vec2<Complex> = &vec_real * &vec_complex;
     println!("mul_res = {}", mul_res);
@@ -33,7 +35,10 @@ fn main() {
         mul_res.inner_product(&mul_res)
     );
     println!("Complex norm squared: {}", vec_complex.norm_squared());
-    println!("Complex dot self: {}", vec_complex.dot(&vec_complex));
+    println!(
+        "Complex inner product self: {}",
+        vec_complex.inner_product(&vec_complex)
+    );
     println!("mul_res norm: {}", mul_res.norm());
     println!(
         "Canonical basis of R^2: [{}, {}]",
