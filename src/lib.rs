@@ -1,14 +1,9 @@
-pub mod braket;
-mod custom_type;
-// pub mod qubit;
 pub mod ordered_basis;
-pub mod vector;
+mod qubit;
+pub mod super_position;
+mod utility;
 
-pub use crate::custom_type::custom_type::Complex;
-pub use crate::custom_type::custom_type::Real;
-pub use crate::ordered_basis::linalg::OrderedBasis;
-
-pub use crate::vector::linalg::Vec0;
-pub use crate::vector::linalg::Vec1;
-pub use crate::vector::linalg::Vec2;
-pub use crate::vector::linalg::Vec3;
+pub use crate::ordered_basis::linalg::OrderedOrthonormalBasis;
+pub use crate::super_position::super_position::SuperPosition;
+pub use crate::utility::utility::Complex;
+pub use crate::utility::utility::Real;
